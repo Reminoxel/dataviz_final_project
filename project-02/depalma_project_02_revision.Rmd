@@ -1,0 +1,763 @@
+---
+title: "Data Visualization Mini-Project 2 Revision" 
+author: "Joseph DePalma - JDePalma1039@floridapoly.edu" 
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(plotly)
+library(htmlwidgets)
+library(broom)
+library(sf)
+library(scales)
+library(viridis)
+library(maps)
+library(grid)
+```
+
+```{css, echo=FALSE}
+body {
+  background-color: black;
+}
+
+.main-container {
+  background-color: black;
+  color: white;
+}
+```
+
+I learned how to make the whole paper dark!
+
+# Introduction
+
+For this mini-project I used three datasets: `us_births_00_14.csv`, `atl-weather.csv`, and `Florida_Lakes.zip`. The births dataset shows daily birth totals in the United States from 2000 to 2014. The weather dataset shows daily weather conditions in Atlanta during 2019. The Florida Lakes dataset is a shapefile dataset used for the spatial visualization.
+
+I picked the births and weather datasets because they both have time-based patterns, but in different ways. Births seem like they would be random at first, but the data shows that human behavior and scheduling probably matter a lot. Weather is more naturally seasonal, so it gives a different type of pattern to compare.
+
+The main thing I wanted to look at was how births change by weekday and month, and how Atlanta weather changes across the year. I also wanted to include more than just simple count charts this time, so I added an interactive heatmap, a spatial visualization, and a model visualization.
+
+The original charts I planned to make were:
+
+1. A bar chart of average births by weekday
+2. An interactive heatmap of births by month and weekday
+3. A line chart of Atlanta temperature by month
+4. A spatial map of Florida lakes using shapefile data
+5. A coefficient plot from a weather model
+
+# Load and Explore the Data
+
+Read the datasets from the `data` folder.
+
+```{r, message=FALSE, warning=FALSE}
+births <- read_csv("../data/us_births_00_14.csv", col_types = cols())
+weather <- read_csv("../data/atl-weather.csv", col_types = cols())
+```
+
+Use `glimpse()` to look at the dataset structures.
+
+```{r}
+glimpse(births)
+glimpse(weather)
+```
+
+Check the dimensions of both datasets.
+
+```{r}
+dim(births)
+dim(weather)
+```
+
+Look at the column names.
+
+```{r}
+names(births)
+names(weather)
+```
+
+Look at a few of the variables that will be used for the plots.
+
+```{r}
+births %>%
+  select(year, month, date, day_of_week, births) %>%
+  head()
+
+weather %>%
+  select(time, summary, icon, precipProbability, temperatureHigh, temperatureLow, humidity, cloudCover, windSpeed) %>%
+  head()
+```
+
+# Clean the Data
+
+The datasets were already pretty usable, but I cleaned them so the dates, months, weekdays, and weather categories worked better in the charts.
+
+```{r}
+births_clean <- births %>%
+  mutate(
+    date = ymd(date),
+    month_name = factor(month.abb[month], levels = month.abb),
+    day_of_week = factor(
+      day_of_week,
+      levels = c("Mon", "Tues", "Wed", "Thurs", "Fri", "Sat", "Sun")
+    ),
+    day_type = if_else(day_of_week %in% c("Sat", "Sun"), "Weekend", "Weekday")
+  )
+
+weather_clean <- weather %>%
+  mutate(
+    date = as.Date(ymd_hms(time)),
+    month = month(date),
+    month_name = factor(month.abb[month], levels = month.abb),
+    precipIntensity = replace_na(precipIntensity, 0),
+    precipProbability = replace_na(precipProbability, 0),
+    humidity = replace_na(humidity, 0),
+    cloudCover = replace_na(cloudCover, 0),
+    windSpeed = replace_na(windSpeed, 0),
+    rainy_day = precipProbability >= 0.5 | icon == "rain",
+    temperature_range = temperatureHigh - temperatureLow
+  )
+```
+
+Check the cleaned datasets.
+
+```{r}
+glimpse(births_clean)
+glimpse(weather_clean)
+```
+
+# Missing Values
+
+I checked missing values because missing data can affect charts and models.
+
+```{r}
+births_clean %>%
+  summarize(
+    missing_date = sum(is.na(date)),
+    missing_year = sum(is.na(year)),
+    missing_month = sum(is.na(month)),
+    missing_weekday = sum(is.na(day_of_week)),
+    missing_births = sum(is.na(births))
+  )
+```
+
+```{r}
+weather_clean %>%
+  summarize(
+    missing_date = sum(is.na(date)),
+    missing_summary = sum(is.na(summary)),
+    missing_icon = sum(is.na(icon)),
+    missing_high_temp = sum(is.na(temperatureHigh)),
+    missing_low_temp = sum(is.na(temperatureLow)),
+    missing_humidity = sum(is.na(humidity)),
+    missing_cloud_cover = sum(is.na(cloudCover)),
+    missing_wind_speed = sum(is.na(windSpeed))
+  )
+```
+
+# Basic Summary
+
+Here is a basic summary of the births dataset.
+
+```{r}
+births_clean %>%
+  summarize(
+    total_days = n(),
+    first_year = min(year, na.rm = TRUE),
+    last_year = max(year, na.rm = TRUE),
+    total_births = sum(births, na.rm = TRUE),
+    average_daily_births = round(mean(births, na.rm = TRUE), 1)
+  )
+```
+
+Here is a basic summary of the Atlanta weather dataset.
+
+```{r}
+weather_clean %>%
+  summarize(
+    total_days = n(),
+    first_date = min(date, na.rm = TRUE),
+    last_date = max(date, na.rm = TRUE),
+    average_high_temp = round(mean(temperatureHigh, na.rm = TRUE), 1),
+    average_low_temp = round(mean(temperatureLow, na.rm = TRUE), 1),
+    rainy_days = sum(rainy_day, na.rm = TRUE)
+  )
+```
+
+# Visualization 1: Average Births by Weekday
+
+The first chart shows average births by weekday.
+
+```{r}
+births_weekday <- births_clean %>%
+  group_by(day_of_week, day_type) %>%
+  summarize(
+    average_births = mean(births, na.rm = TRUE),
+    total_births = sum(births, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+births_weekday
+```
+
+```{r average-births-weekday, fig.alt="Bar chart showing average U.S. births by weekday, with weekdays higher than weekends and the highest average day labeled.", fig.width=8.5, fig.height=5, out.width="100%"}
+highest_day <- births_weekday %>%
+  slice_max(average_births, n = 1, with_ties = FALSE)
+
+ggplot(births_weekday, aes(x = day_of_week, y = average_births, fill = day_type)) +
+  geom_col(width = 0.75) +
+  geom_text(
+    aes(label = comma(round(average_births))),
+    vjust = -0.45,
+    size = 3.5,
+    color = "white",
+    fontface = "bold"
+  ) +
+  geom_label(
+    data = highest_day,
+    aes(
+      x = day_of_week,
+      y = average_births + 2300,
+      label = "Highest average"
+    ),
+    inherit.aes = FALSE,
+    fill = "black",
+    color = "white",
+    fontface = "bold",
+    label.size = 0.25,
+    size = 3.7
+  ) +
+  scale_fill_manual(values = c("Weekday" = "steelblue", "Weekend" = "darkorange")) +
+  scale_y_continuous(
+    labels = comma,
+    expand = expansion(mult = c(0, 0.28))
+  ) +
+  labs(
+    title = "Average U.S. Births by Weekday",
+    subtitle = "Births are higher on weekdays than weekends",
+    x = "Day of the Week",
+    y = "Average Daily Births",
+    fill = "Day Type"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+  
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "gray25"),
+  
+    plot.title = element_text(color = "white", face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "gray85", hjust = 0.5),
+    axis.title.x = element_text(color = "white"),
+    axis.title.y = element_text(color = "white", margin = margin(r = 14)),
+    axis.text = element_text(color = "gray85"),
+    legend.title = element_text(color = "white"),
+    legend.text = element_text(color = "gray85"),
+    legend.position = "bottom",
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 18)
+)
+```
+
+This chart shows that average births are higher during the week and lower on weekends. I used a bar chart because weekdays are categories. This also fixes one of the issues from my first project, where the weekday chart probably should have been a bar chart instead of a line chart.
+
+The pattern is interesting because it probably does not only reflect when babies naturally arrive. It also likely reflects scheduled deliveries, hospital staffing, and other human systems.
+
+# Visualization 2: Interactive Birth Heatmap
+
+Next, I looked at births by both month and weekday.
+
+```{r}
+births_month_weekday <- births_clean %>%
+  group_by(month_name, day_of_week) %>%
+  summarize(
+    average_births = mean(births, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    tooltip = paste0(
+      "Month: ", month_name,
+      "<br>Day: ", day_of_week,
+      "<br>Average births: ", comma(round(average_births))
+    )
+  )
+
+births_month_weekday
+```
+
+```{r interactive-birth-heatmap, message=FALSE, warning=FALSE, fig.alt="Interactive heatmap showing average births by month and weekday, where darker and brighter tiles show lower and higher average daily births."}
+births_heatmap <- ggplot(
+  births_month_weekday,
+  aes(x = day_of_week, y = month_name, fill = average_births, text = tooltip)
+) +
+  geom_tile(color = "gray15", linewidth = 0.4) +
+  scale_fill_viridis_c(option = "plasma", labels = comma) +
+  labs(
+    title = "Births by Month and Weekday",
+    subtitle = "This interactive heatmap compares two time patterns at once",
+    x = "Day of the Week",
+    y = "Month",
+    fill = "Average Births"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+
+    panel.grid = element_blank(),
+
+    plot.title = element_text(color = "white", face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "gray85", hjust = 0.5),
+    axis.title.x = element_text(color = "white"),
+    axis.title.y = element_text(color = "white", margin = margin(r = 12)),
+    axis.text = element_text(color = "gray85"),
+    legend.title = element_text(color = "white"),
+    legend.text = element_text(color = "gray85"),
+    legend.position = "right",
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 18)
+  )
+
+births_interactive <- ggplotly(births_heatmap, tooltip = "text") %>%
+  layout(
+    paper_bgcolor = "black",
+    plot_bgcolor = "black",
+    font = list(color = "white"),
+    legend = list(
+      bgcolor = "black",
+      font = list(color = "white")
+    )
+  ) %>%
+  config(displayModeBar = FALSE)
+
+births_interactive
+
+saveWidget(
+  births_interactive,
+  file = "interactive_births_month_weekday.html",
+  selfcontained = TRUE
+)
+```
+
+This chart makes the pattern easier to explore because it does not just look at one variable at a time. The weekday chart already showed that births are higher during the week, but the heatmap shows whether that same pattern holds across different months. I also included this as the interactive plot because the assignment required at least one interactive visualization. The hover feature is useful because it lets someone check the exact average for a specific month and weekday without making the chart look cluttered.
+
+# Visualization 3: Atlanta Weather by Month
+
+Then I looked at how Atlanta temperatures changed across 2019.
+
+```{r}
+weather_monthly <- weather_clean %>%
+  group_by(month_name) %>%
+  summarize(
+    average_high = mean(temperatureHigh, na.rm = TRUE),
+    average_low = mean(temperatureLow, na.rm = TRUE),
+    rainy_days = sum(rainy_day, na.rm = TRUE),
+    average_humidity = mean(humidity, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+weather_monthly
+```
+
+```{r atlanta-weather-monthly, fig.alt="Line chart showing Atlanta average high and low temperatures by month, with point size representing rainy days and the warmest month labeled.", fig.width=8.5, fig.height=5, out.width="100%"}
+hottest_month <- weather_monthly %>%
+  slice_max(average_high, n = 1, with_ties = FALSE)
+
+ggplot(weather_monthly, aes(x = month_name, group = 1)) +
+  geom_line(aes(y = average_high), color = "firebrick2", linewidth = 1.1) +
+  geom_point(aes(y = average_high, size = rainy_days), color = "firebrick2", alpha = 0.85) +
+  geom_line(aes(y = average_low), color = "deepskyblue3", linewidth = 1.1) +
+  geom_point(aes(y = average_low, size = rainy_days), color = "deepskyblue3", alpha = 0.85) +
+  annotate(
+    "label",
+    x = hottest_month$month_name,
+    y = hottest_month$average_high + 5,
+    label = paste("Warmest month:", hottest_month$month_name),
+    fill = "black",
+    color = "white",
+    fontface = "bold",
+    label.size = 0.25,
+    size = 3.7
+  ) +
+  scale_size_continuous(range = c(2.5, 7.5)) +
+  scale_y_continuous(
+    expand = expansion(mult = c(0.05, 0.18))
+  ) +
+  labs(
+    title = "Atlanta Weather by Month",
+    subtitle = "Average high and low temperatures follow a seasonal pattern",
+    x = "Month",
+    y = "Average Temperature (F)",
+    size = "Rainy Days"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "gray25"),
+
+    plot.title = element_text(color = "white", face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "gray85", hjust = 0.5),
+    axis.title.x = element_text(color = "white"),
+    axis.title.y = element_text(color = "white", margin = margin(r = 14)),
+    axis.text = element_text(color = "gray85"),
+    legend.title = element_text(color = "white"),
+    legend.text = element_text(color = "gray85"),
+    legend.position = "bottom",
+    plot.margin = margin(t = 10, r = 10, b = 10, l = 18)
+  )
+```
+
+This chart shows the seasonal pattern in Atlanta pretty clearly. The high and low temperatures both climb into the summer months and then start dropping again later in the year, which is about what I expected. I also used the point size to show rainy days because weather is not just about temperature. This gives the chart a little more context and lets the viewer see temperature and rain patterns in the same visual.
+
+# Visualization 4: Spatial Visualization of Florida Lakes
+
+I used the `Florida_Lakes.zip` shapefile dataset for the spatial visualization. This fits the assignment requirement because the map is based on shapefile data stored in the `data` folder.
+
+```{r, message=FALSE, warning=FALSE}
+if (!dir.exists("../data/Florida_Lakes")) {
+  unzip("../data/Florida_Lakes.zip", exdir = "../data/Florida_Lakes")
+}
+
+lake_shp <- list.files(
+  "../data/Florida_Lakes",
+  pattern = "\\.shp$",
+  recursive = TRUE,
+  full.names = TRUE
+)[1]
+
+florida_lakes <- st_read(lake_shp, quiet = TRUE)
+
+glimpse(florida_lakes)
+```
+
+```{r}
+florida_lakes_clean <- florida_lakes %>%
+  st_transform(3086) %>%
+  mutate(
+    area_acres = as.numeric(st_area(geometry)) * 0.000247105
+  )
+```
+
+```{r florida-lakes-map, fig.width=9, fig.height=6.2, out.width="100%", fig.align="center", message=FALSE, warning=FALSE, fig.alt="Map of Florida showing lake polygons colored by estimated area, with the Florida outline used for geographic context."}
+florida_outline <- map_data("state", region = "florida")
+
+florida_lakes_plot <- florida_lakes_clean %>%
+  st_transform(4326)
+
+ggplot() +
+  geom_polygon(
+    data = florida_outline,
+    aes(x = long, y = lat, group = group),
+    fill = "gray12",
+    color = "gray85",
+    linewidth = 0.5
+  ) +
+  geom_sf(
+    data = florida_lakes_plot,
+    aes(fill = area_acres),
+    color = NA,
+    alpha = 0.95,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_viridis_c(
+    option = "plasma",
+    labels = label_number(scale = 1 / 1000, suffix = "k"),
+    trans = "sqrt"
+  ) +
+  guides(
+    fill = guide_colorbar(
+      title.position = "top",
+      title.hjust = 0.5,
+      barwidth = unit(5.5, "cm"),
+      barheight = unit(0.35, "cm")
+    )
+  ) +
+  coord_sf(
+    xlim = c(-88.2, -79.5),
+    ylim = c(24.0, 31.4),
+    expand = FALSE,
+    datum = NA
+  ) +
+  labs(
+    title = "Florida Lakes by Estimated Area",
+    subtitle = "Lake polygons shown inside the outline of Florida",
+    fill = "Area Acres",
+    caption = "Data: Florida_Lakes shapefile"
+  ) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+
+    plot.title = element_text(color = "white", face = "bold", hjust = 0.5, size = 16),
+    plot.subtitle = element_text(color = "gray85", hjust = 0.5, size = 11),
+    plot.caption = element_text(color = "gray70", hjust = 0.5, size = 9),
+
+    legend.title = element_text(color = "white"),
+    legend.text = element_text(color = "gray85"),
+    legend.position = "bottom",
+
+    plot.margin = margin(t = 12, r = 24, b = 8, l = 24)
+  )
+```
+
+This map works better with the Florida outline included because the lake polygons by themselves did not clearly show the shape of the state. The outline gives the viewer geographic context, while the lake colors show estimated area. I used a sequential color scale because lake area is numeric, so smaller lakes appear darker and larger lakes appear brighter. This makes the map show both location and size instead of only placing shapes on a map.
+
+# Visualization 5: Weather Model Coefficients
+
+Finally, I made a model visualization using the Atlanta weather data. The model looks at how humidity, cloud cover, wind speed, and precipitation probability relate to daily high temperature.
+
+```{r}
+weather_model_data <- weather_clean %>%
+  select(
+    temperatureHigh,
+    humidity,
+    cloudCover,
+    windSpeed,
+    precipProbability
+  ) %>%
+  drop_na()
+
+weather_model <- lm(
+  temperatureHigh ~ humidity + cloudCover + windSpeed + precipProbability,
+  data = weather_model_data
+)
+
+summary(weather_model)
+```
+
+```{r}
+model_coefficients <- tidy(weather_model, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term = recode(
+      term,
+      humidity = "Humidity",
+      cloudCover = "Cloud Cover",
+      windSpeed = "Wind Speed",
+      precipProbability = "Precipitation Probability"
+    ),
+    term = fct_reorder(term, estimate)
+  )
+
+model_coefficients
+```
+
+The first version below is a raw coefficient plot. It is useful, but it has one major weakness: the predictors are measured on different scales. For example, wind speed is measured differently from humidity or precipitation probability, so the raw estimates are not always the fairest direct comparison.
+
+```{r model-coefficient-plot-before, fig.width=8.5, fig.height=5, out.width="100%", fig.align="center", message=FALSE, warning=FALSE, fig.alt="Raw coefficient plot from an Atlanta weather model showing estimated relationships between weather variables and daily high temperature."}
+model_coefficients <- model_coefficients %>%
+  mutate(
+    direction = if_else(estimate >= 0, "Positive", "Negative")
+  )
+
+ggplot(model_coefficients, aes(x = estimate, y = term, color = direction)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray70", linewidth = 0.6) +
+  geom_pointrange(
+    aes(xmin = conf.low, xmax = conf.high),
+    linewidth = 0.8,
+    size = 0.7
+  ) +
+  scale_color_manual(
+    values = c("Positive" = "darkorange", "Negative" = "deepskyblue3")
+  ) +
+  scale_x_continuous(
+    limits = c(-45, 58),
+    breaks = c(-25, 0, 25, 50),
+    expand = expansion(mult = c(0.02, 0.02))
+  ) +
+  labs(
+    title = "Weather Model Coefficients",
+    subtitle = "Positive and negative estimates show how variables relate to daily high temperature",
+    x = "Estimated Change in Daily High Temperature",
+    y = "",
+    color = "Relationship"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "gray25"),
+    panel.grid.major.y = element_line(color = "gray18"),
+
+    plot.title = element_text(color = "white", face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "gray85", hjust = 0.5),
+    axis.title.x = element_text(color = "white", margin = margin(t = 10)),
+    axis.text = element_text(color = "gray85"),
+    legend.title = element_text(color = "white"),
+    legend.text = element_text(color = "gray85"),
+    legend.position = "bottom",
+
+    plot.margin = margin(t = 12, r = 4, b = 12, l = 18)
+  )
+```
+
+This chart adds more analysis because it turns the model output into something easier to compare visually. Instead of only reading the regression summary, I can see which variables are estimated to have positive or negative relationships with daily high temperature. It is not meant to perfectly predict Atlanta weather, but it helps show which variables appear more connected to temperature in this dataset.
+
+# Redesign: Weather Model Coefficients
+
+For the required chart redesign, I focused on the weather model coefficient plot instead of adding a random new chart. The original coefficient plot was not terrible, but it had a real issue: it compared raw coefficients from predictors that are not measured on the same scale. A one-unit change in wind speed is not the same kind of change as a one-unit change in humidity or precipitation probability.
+
+To fix that, I rebuilt the model using standardized variables. This makes the coefficients easier to compare because each predictor is measured in standard deviation units. The redesigned chart still keeps my same dark style and positive/negative color idea, but the comparison is more honest.
+
+```{r weather-model-standardized, message=FALSE, warning=FALSE}
+weather_model_scaled_data <- weather_clean %>%
+  select(
+    temperatureHigh,
+    humidity,
+    cloudCover,
+    windSpeed,
+    precipProbability
+  ) %>%
+  drop_na() %>%
+  mutate(
+    across(
+      c(temperatureHigh, humidity, cloudCover, windSpeed, precipProbability),
+      ~ as.numeric(scale(.x))
+    )
+  )
+
+weather_model_scaled <- lm(
+  temperatureHigh ~ humidity + cloudCover + windSpeed + precipProbability,
+  data = weather_model_scaled_data
+)
+
+model_coefficients_scaled <- tidy(weather_model_scaled, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term = recode(
+      term,
+      humidity = "Humidity",
+      cloudCover = "Cloud Cover",
+      windSpeed = "Wind Speed",
+      precipProbability = "Precipitation Probability"
+    ),
+    direction = if_else(estimate >= 0, "Positive", "Negative"),
+    label = round(estimate, 2),
+    term = fct_reorder(term, abs(estimate))
+  )
+
+model_coefficients_scaled
+```
+
+```{r weather-model-coefficient-redesign, fig.width=8.5, fig.height=5, out.width="100%", fig.align="center", message=FALSE, warning=FALSE, fig.alt="Redesigned standardized coefficient plot showing comparable weather model effect sizes with confidence intervals and a zero reference line."}
+ggplot(model_coefficients_scaled, aes(x = estimate, y = term, color = direction)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray70", linewidth = 0.6) +
+  geom_segment(
+    aes(x = conf.low, xend = conf.high, y = term, yend = term),
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(shape = direction, fill = direction),
+    size = 3.3,
+    stroke = 0
+  ) +
+  geom_text(
+    aes(label = label),
+    color = "white",
+    nudge_y = 0.22,
+    size = 3.5,
+    fontface = "bold"
+  ) +
+  scale_color_manual(
+    values = c("Positive" = "darkorange", "Negative" = "deepskyblue3")
+  ) +
+  scale_fill_manual(
+    values = c("Positive" = "darkorange", "Negative" = "deepskyblue3")
+  ) +
+  scale_shape_manual(
+    values = c("Positive" = 17, "Negative" = 25)
+  ) +
+  labs(
+    title = "Redesigned Weather Model Coefficients",
+    subtitle = "Standardized coefficients make the weather variables easier to compare fairly",
+    x = "Standardized Estimated Relationship with Daily High Temperature",
+    y = "",
+    color = "Relationship",
+    shape = "Relationship",
+    fill = "Relationship"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "black", color = NA),
+    panel.background = element_rect(fill = "black", color = NA),
+    legend.background = element_rect(fill = "black", color = NA),
+    legend.key = element_rect(fill = "black", color = NA),
+
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_line(color = "gray25"),
+    panel.grid.major.y = element_line(color = "gray18"),
+
+    plot.title = element_text(color = "white", face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(color = "gray85", hjust = 0.5),
+    axis.title.x = element_text(color = "white", margin = margin(t = 10)),
+    axis.text = element_text(color = "gray85"),
+    legend.title = element_text(color = "white"),
+    legend.text = element_text(color = "gray85"),
+    legend.position = "bottom",
+
+    plot.margin = margin(t = 12, r = 4, b = 12, l = 18)
+  )
+```
+
+The redesigned version is better because it fixes the way the coefficients are being compared, not just how the chart looks. The original raw coefficient plot showed the model results, but the variables were on different scales, so the coefficients were not as easy to compare directly. By using standardized coefficients, the redesigned chart makes it easier to see which weather variables have stronger relationships with daily high temperature. The zero line still makes it clear whether each relationship is positive or negative, and the confidence intervals show how certain or uncertain each estimate is.
+
+# Findings
+
+The biggest pattern in the births data is that births are not spread evenly across the week. Weekdays have higher average births than weekends, which was one of the clearest findings in the project. This was interesting because it shows the data probably reflects more than just when babies naturally arrive. It may also connect to hospital scheduling, planned deliveries, and other human decisions.
+
+The interactive heatmap made that pattern easier to check across the year. Instead of only saying weekdays are higher overall, it shows that the weekday/weekend difference appears across different months too.
+
+The Atlanta weather data showed a more expected pattern. High and low temperatures rise into the summer and then drop later in the year. I also included rainy days in the chart so it was not only showing temperature.
+
+The Florida lakes map was mostly used for the spatial part of the assignment. At first, the lake polygons alone did not clearly look like Florida, so I added the state outline behind them. That made the map easier to understand and gave the lakes actual geographic context.
+
+The model chart added another layer because it compared multiple weather variables at once. It is not meant to perfectly predict weather, but it helped show which variables had positive or negative relationships with daily high temperature. The redesigned standardized coefficient chart made that comparison stronger because the predictors were placed on the same scale before comparing them.
+
+# Design Choices
+
+For this project, I tried to keep the same general layout as Mini-Project 1, but improve the parts I lost points on. In the feedback from Mini-Project 1, one issue was that the charts were clear but a little too simple. So for this project, I still kept the visuals readable, but added more layered charts like the heatmap, the weather chart with rainy days, the spatial map, and the model coefficient plot.
+
+I also changed how I handled weekdays. In Mini-Project 1, the weekday chart would have worked better as a bar chart because weekdays are categories. I used that feedback here and made the births-by-weekday chart a bar chart instead of a line chart.
+
+I added annotations and labels where they helped, like marking the highest average birth day and the warmest month in the weather chart. I also tried to make the colors serve a purpose. For example, weekdays and weekends use different colors, high and low temperatures use warm/cool colors, and the model chart separates positive and negative estimates.
+
+I used a black background on several charts because I liked the look, but I tried to keep the colors meaningful instead of just making everything flashy. For the coefficient redesign, I kept the same orange and blue colors, but improved the actual comparison by using standardized coefficients and adding a zero reference line, confidence intervals, labels, and shape differences. The goal was still readability first.
+
+# Difficulties and Additional Approaches
+
+One challenge was making the project feel connected because I used more than one dataset. The births data worked best for weekday and monthly patterns, the weather data worked better for trends and modeling, and the Florida Lakes shapefile was mainly there for the spatial requirement. I explained the shapefile section separately instead of forcing it to connect to births or weather.
+
+Another challenge was the spatial map. The first version only showed lake polygons, so it was hard to tell that the map was Florida. Adding the state outline fixed that and made the visualization much clearer.
+
+The black background also took some adjusting. Some labels, legends, and annotations were hard to read at first, so I had to adjust spacing, text color, and legend placement to make the charts look cleaner.
+
+If I continued this project, I could make it stronger by using birth data with state or region information. That would connect the births analysis to a spatial map better. For the weather data, I could compare Atlanta to other cities or use multiple years to see if 2019 was normal or unusual.
+
+# Accessibility and Interactivity Notes
+
+For accessibility, I added alt text to the main figure chunks and avoided relying only on color when possible. The weather coefficient redesign uses both color and shape for positive and negative relationships, and the model estimates are also separated by position around the zero line. The interactive birth heatmap lets the reader hover over each month and weekday combination to see the exact average birth value without crowding the chart with labels.
+
+# Conclusion
+
+This project helped me build on Mini-Project 1 instead of just repeating the same type of charts. The births data showed that births are higher on weekdays than weekends, which probably connects to hospital scheduling and human systems. The Atlanta weather data showed a clear seasonal pattern, and the model chart gave another way to compare weather variables.
+
+The biggest change from my first project was trying to go beyond simple counts. I added annotations, an interactive plot, a shapefile map, and a model visualization. Overall, I tried to make the project tell a stronger data story while still keeping the report organized and easy to follow.
