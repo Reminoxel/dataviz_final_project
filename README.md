@@ -1,43 +1,61 @@
 # Data Visualization and Reproducible Research
 
-> Firstname Lastname. 
+> Joseph DePalma
 
+This repository contains my final project materials for Data Visualization and Reproducible Research. The projects show revised work from earlier mini-projects along with a final visualization project using Tampa weather data and concrete strength data.
 
-The following is a sample of products created during the _"Data Visualization and Reproducible Research"_ course.
-
+The goal of this final project was to clean up previous work, make the reports more reproducible, improve the visualizations, and include required elements such as an interactive chart, accessibility considerations, and a before/after chart redesign.
 
 ## Project 01
 
-In the `project_01/` folder you can find... _[add short description of your revised project here]_
+In the `project_01/` folder, you can find my revised Mini-Project 1 using the NYC rat sightings dataset. This project explores reported rat sightings by borough, weekday, year, and location type. I also considered how the dataset reflects both rat activity and human reporting behavior, since the data comes from reported sightings rather than direct rat counts.
 
-**Sample data visualization:** 
+This revision includes clearer chart design, a weekday bar chart redesign, accessibility updates, and an interactive visualization.
 
-_[include your favorite visualization from this project here]_
-<img src="https://raw.githubusercontent.com/aalhamadani/dataviz_final_project/main/figures/echarts.png" width="70%" height="70%">
+**Favorite visualization:**
 
+<img src="figures/borough-chart-1.png" width="75%">
+
+My favorite visualization from this project is the rat sightings by borough chart because it quickly shows where reports were most concentrated and gives the project a clear starting point.
 
 ## Project 02
 
-In this project, I explored ... _[short description of your revised project goes here]_ Find the code and report in the `project_02/` folder.
+In the `project_02/` folder, you can find my revised Mini-Project 2. This project combines multiple visualization types, including time-based birth patterns, Atlanta weather trends, a Florida lakes spatial visualization, and a weather model coefficient plot.
 
-**Sample data visualization:** 
+This project gave me more practice with different kinds of data, including dates, maps, interactive heatmaps, and model-based visualizations. The revision focuses on making the charts clearer while keeping the original style of the report.
 
-_[include your favorite visualization from this project here]_
-<img src="https://raw.githubusercontent.com/aalhamadani/dataviz_final_project/main/figures/fl_higher_ed.png" width="80%" height="80%">
+**Favorite visualization:**
 
-(you can place your figures in the `figures/` folder and use the `![](path_to_picture)` option to add the pictures here)
+<img src="figures/florida-lakes-map-1.png" width="75%">
 
+My favorite visualization from this project is the Florida lakes map because it felt like the cleanest spatial visualization in the report. The map makes the data feel more connected to a real place instead of just showing another table or chart. Adding the Florida outline also helped give the lakes more context, so the viewer can understand where the lake data is located instead of just seeing shapes floating by themselves.
 
 ## Project 03
 
-In this project, I explored ... _[short description of the data visualizations you for this part of the project produced goes here]_
+In the `project_03/` folder, you can find my final visualization project. The first part recreates several density-based charts using 2022 Tampa weather data from the Florida Climate Center. These include faceted histograms, density plots, a ridgeline plot, and a precipitation summary.
 
-**Sample data visualization:** 
+The second part uses the concrete compressive strength dataset. I explored distributions of cement and strength, looked at concrete strength by age, and created a scatterplot showing how cement, age, and water relate to compressive strength.
 
-_[include your favorite visualization from this project here]_
-<img src="https://raw.githubusercontent.com/aalhamadani/dataviz_final_project/main/figures/concrete_density.png" width="80%" height="80%">
+This project also includes an interactive chart and a before/after redesign section.
 
+**Favorite visualization:**
 
-### Moving Forward
+<img src="figures/tpa-max-temp-ridges-1.png" width="75%">
 
-_Please add here a short reflection on what you learned and what you plan to continue exploring in terms of data visualization, data storytelling, reproducible research, and/or related topics._
+My favorite visualization from this project is the Tampa temperature ridgeline plot because it makes the seasonal shift across months easy to see while also looking more visually interesting than a basic chart.
+
+## Required Final Project Elements
+
+Each project includes the required final project elements:
+
+* An interactive visualization
+* Accessibility improvements, including alt text and readable design choices
+* A before/after chart redesign
+* Commentary explaining the purpose of the visualizations
+* Reproducible code using relative paths where local data files are used
+
+## Moving Forward
+
+This course helped me understand that making a chart is not just about getting code to run. A visualization also has to make sense for the data and for the person reading it. I got more comfortable using `ggplot2`, working with dates, using facets, making maps, and adding interactivity.
+
+Moving forward, I want to keep improving how I explain charts, not just how I create them. I also want to keep practicing interactive and dashboard-style visualizations because they make it easier for someone to explore the data instead of only looking at one static view.
