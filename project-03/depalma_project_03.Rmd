@@ -1,0 +1,421 @@
+---
+title: "Project 03: Density Plots and Concrete Strength"
+author: "Joseph DePalma"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+# Data Visualization Project 03
+
+This project has two parts. First, I worked with Tampa weather data from 2022 and recreated several of the example charts from the template. Then I used the concrete strength dataset to look at how age and mixture ingredients relate to compressive strength.
+
+I chose the concrete option for Part 2 because it felt more straightforward and more connected to the kinds of visual comparisons we have been doing in class. It also gave me a chance to look at continuous variables, time/age, and a few relationship-based plots without turning the project into a text-mining project.
+
+## Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggridges)
+library(plotly)
+library(scales)
+library(knitr)
+
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+## Part 1: Tampa Weather Density Plots
+
+The Tampa weather data contains daily measurements from 2022, including precipitation, maximum temperature, minimum temperature, and average temperature. Values such as `-99.9` for temperature and `-99.99` for precipitation represent missing data, so those values are converted to `NA` before plotting.
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+weather_tpa <- read_csv("https://raw.githubusercontent.com/aalhamadani/datasets/master/tpa_weather_2022.csv")
+
+# random sample 
+sample_n(weather_tpa, 4)
+```
+For this plot, I first created a real date variable from the separate `year`, `month`, and `day` columns. This follows the same general idea from the Week 4 relationships and models slides, where `lubridate` is used to turn the weather date columns into an actual date before plotting by month.
+
+```{r prepare-tpa-dates, message=FALSE, warning=FALSE}
+library(lubridate)
+
+weather_tpa <- weather_tpa %>%
+  mutate(
+    doy = ymd(paste(year, month, day, sep = "-")),
+    max_temp = as.double(max_temp),
+    min_temp = as.double(min_temp),
+    precipitation = as.double(precipitation),
+    month_name = month(doy, label = TRUE, abbr = FALSE)
+  )
+```
+
+
+### A. Faceted Histogram of Maximum Temperature
+
+```{r tpa-max-temp-histogram, fig.width=9, fig.height=6.5, out.width="100%", fig.align="center", fig.alt="Faceted histograms showing the distribution of Tampa daily maximum temperatures for each month in 2022."}
+ggplot(weather_tpa, aes(x = max_temp, fill = month_name)) +
+  geom_histogram(
+    binwidth = 3,
+    color = "white",
+    linewidth = 0.25
+  ) +
+  facet_wrap(~ month_name, ncol = 4) +
+  scale_fill_viridis_d(option = "viridis", guide = "none") +
+  labs(
+    x = "Maximum temperatures",
+    y = "Number of Days"
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    strip.background = element_rect(fill = "gray85", color = "gray35"),
+    strip.text = element_text(color = "gray10", size = 12),
+    axis.title = element_text(size = 13),
+    axis.text = element_text(color = "gray25"),
+    legend.position = "none"
+  )
+```
+
+The histogram shows the seasonal shift pretty clearly. The cooler months have more spread, while the summer months are packed into a hotter range. That makes sense for Tampa because summer is pretty consistently hot, while winter has more day-to-day variation.
+
+### B. Density Plot of Maximum Temperature
+
+```{r tpa-max-temp-density, fig.width=8, fig.height=5, out.width="100%", fig.align="center", fig.alt="Density plot showing the overall distribution of Tampa daily maximum temperatures in 2022."}
+ggplot(weather_tpa, aes(x = max_temp)) +
+  geom_density(
+    kernel = "gaussian",
+    bw = 0.5,
+    fill = "gray45",
+    color = "gray15",
+    linewidth = 1
+  ) +
+  labs(
+    x = "Maximum temperature",
+    y = "density"
+  ) +
+  scale_x_continuous(
+    breaks = seq(60, 90, by = 10),
+    limits = c(54, 96)
+  ) +
+  theme_minimal(base_size = 16) +
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20),
+    axis.text = element_text(color = "gray20"),
+    panel.grid.major = element_line(color = "gray88"),
+    panel.grid.minor = element_line(color = "gray92")
+  )
+```
+
+The density plot shows the same temperature pattern in a smoother way. Most of the daily highs are pushed toward the warmer side, which is not shocking for Tampa, but it does make the long warm season easy to see.
+
+### C. Faceted Density Plot by Month
+
+```{r tpa-max-temp-density-facet, fig.width=9, fig.height=6.5, out.width="100%", fig.align="center", fig.alt="Faceted density plots showing the distribution of Tampa daily maximum temperatures for each month in 2022."}
+ggplot(weather_tpa, aes(x = max_temp, fill = month_name)) +
+  geom_density(
+    alpha = 0.7,
+    color = "black",
+    linewidth = 0.8
+  ) +
+  facet_wrap(~ month_name, ncol = 4) +
+  scale_fill_viridis_d(option = "viridis", guide = "none") +
+  scale_x_continuous(
+    breaks = seq(60, 90, by = 10),
+    limits = c(55, 100)
+  ) +
+  labs(
+    title = "Density plots for each month in 2022",
+    x = "Maximum temperatures",
+    y = ""
+  ) +
+  theme_bw(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 22, hjust = 0.5),
+    strip.background = element_rect(fill = "gray80", color = "gray20"),
+    strip.text = element_text(size = 14, color = "gray10"),
+    axis.title.x = element_text(size = 18, margin = margin(t = 8)),
+    axis.text = element_text(size = 12, color = "gray20"),
+    panel.grid.major = element_line(color = "gray88"),
+    panel.grid.minor = element_line(color = "gray93"),
+    legend.position = "none"
+  )
+```
+
+Splitting the density plot by month makes the seasonal pattern easier to compare. The summer months are bunched up at higher temperatures, while the cooler months spread out more. I liked this version because it makes the month-to-month difference easier to see than one single density plot.
+
+### D. Ridge Plot of Maximum Temperature
+
+```{r tpa-max-temp-ridges, fig.width=9, fig.height=6, out.width="100%", fig.align="center", message=FALSE, warning=FALSE, fig.alt="Ridgeline density plot showing the distribution of Tampa daily maximum temperatures by month in 2022 using the plasma color palette."}
+ggplot(
+  weather_tpa,
+  aes(
+    x = max_temp,
+    y = fct_rev(month_name),
+    fill = after_stat(x)
+  )
+) +
+  geom_density_ridges_gradient(
+    scale = 1.6,
+    rel_min_height = 0.01,
+    bandwidth = 1.5,
+    quantile_lines = TRUE,
+    quantiles = 2,
+    color = "black",
+    linewidth = 1.1
+  ) +
+  scale_fill_viridis_c(
+    option = "plasma",
+    name = NULL
+  ) +
+  scale_x_continuous(
+    limits = c(50, 102),
+    breaks = seq(50, 100, by = 10)
+  ) +
+  labs(
+    x = "Maximum temperature (in Fahrenheit degrees)",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 16) +
+  theme(
+    axis.title.x = element_text(size = 20),
+    axis.text = element_text(color = "gray25"),
+    panel.grid.major = element_line(color = "gray88"),
+    panel.grid.minor = element_line(color = "gray92"),
+    legend.position = "right"
+  )
+```
+
+The ridge plot is probably the coolest-looking version of the temperature charts. It still tells the same basic story, but stacking the months makes the seasonal change easier to compare at a glance.
+
+### E. Precipitation Plot
+
+```{r tpa-precip-summary}
+monthly_precip <- weather_tpa %>%
+  mutate(
+    precipitation = as.double(precipitation),
+    precipitation = na_if(precipitation, -99.99)
+  ) %>%
+  group_by(month_name) %>%
+  summarize(
+    total_precip = sum(precipitation, na.rm = TRUE),
+    rainy_days = sum(precipitation > 0, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+monthly_precip
+```
+
+```{r tpa-precip-plot, fig.width=8.5, fig.height=5, out.width="100%", fig.align="center", fig.alt="Bar chart showing total monthly precipitation in Tampa during 2022, with labels for the number of rainy days in each month."}
+ggplot(monthly_precip, aes(x = month_name, y = total_precip, fill = total_precip)) +
+  geom_col(color = "white", linewidth = 0.3) +
+  geom_text(
+    aes(label = paste0(rainy_days, " days")),
+    color = "black",
+    vjust = -0.4,
+    size = 3.2
+  ) +
+  scale_fill_viridis_c(option = "plasma", guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(
+    title = "Monthly Precipitation in Tampa, 2022",
+    subtitle = "Bars show total precipitation; labels show days with measurable precipitation",
+    x = "Month",
+    y = "Total precipitation (inches)"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 35, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+```
+
+For precipitation, I summarized the data by month instead of plotting every single day. The bars show total rainfall, and the labels show how many days had measurable rain. I also treated `-99.99` as missing first, because otherwise that fake missing value would mess up the totals.
+
+## Part 2: Concrete Strength
+
+Concrete is the most important material in **civil engineering**. The concrete compressive strength is a highly nonlinear function of _age_ and _ingredients_. The dataset used here is from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/index.php), and it contains 1030 observations with 9 different attributes 9 (8 quantitative input variables, and 1 quantitative output variable). A data dictionary is included below: 
+
+
+Variable                      |    Notes                
+------------------------------|-------------------------------------------
+Cement                        | kg in a $m^3$ mixture             
+Blast Furnace Slag            | kg in a $m^3$ mixture  
+Fly Ash                       | kg in a $m^3$ mixture             
+Water                         | kg in a $m^3$ mixture              
+Superplasticizer              | kg in a $m^3$ mixture
+Coarse Aggregate              | kg in a $m^3$ mixture
+Fine Aggregate                | kg in a $m^3$ mixture      
+Age                           | in days                                             
+Concrete compressive strength | MPa, megapascals
+
+The concrete dataset has 1,030 observations. Each row is one concrete mixture with ingredient amounts, age in days, and compressive strength in MPa. The main idea here is to see how strength changes based on both the recipe and how long the concrete has cured.
+
+```{r}
+concrete <- read_csv("../data/concrete.csv", col_types = cols())
+```
+
+Let us create a new attribute for visualization purposes, `strength_range`: 
+
+```{r}
+new_concrete <- concrete %>%
+  mutate(strength_range = cut(Concrete_compressive_strength, 
+                              breaks = quantile(Concrete_compressive_strength, 
+                                                probs = seq(0, 1, 0.2))) )
+```
+
+### 1.Distribution of continuous variables Cement and Concrete Strength
+
+```{r concrete-distribution-data}
+concrete_long <- new_concrete %>%
+  select(Cement, Concrete_compressive_strength) %>%
+  pivot_longer(
+    cols = everything(),
+    names_to = "variable",
+    values_to = "value"
+  ) %>%
+  mutate(
+    variable = recode(
+      variable,
+      Cement = "Cement (kg per m³)",
+      Concrete_compressive_strength = "Concrete strength (MPa)"
+    )
+  )
+```
+
+```{r concrete-distributions, fig.width=8.5, fig.height=4.8, out.width="100%", fig.align="center", fig.alt="Faceted histograms showing the distributions of cement amount and concrete compressive strength in the concrete dataset."}
+ggplot(concrete_long, aes(x = value)) +
+  geom_histogram(bins = 30, fill = "gray45", color = "white", linewidth = 0.25) +
+  facet_wrap(~ variable, scales = "free", ncol = 2) +
+  labs(
+    title = "Distribution of Cement Amount and Concrete Strength",
+    subtitle = "The two variables have different units and ranges, so they are shown in separate panels",
+    x = "Value",
+    y = "Number of observations"
+  ) +
+  theme_minimal()
+```
+
+The ranges make sense because cement is an ingredient amount, while compressive strength is the outcome being tested. Cement has a broad spread because the dataset includes different mixture recipes. Strength also varies a lot, which tells me that cement alone is not the whole story. Age and the rest of the ingredients are clearly part of it too.
+
+### Concrete Strength by Age
+
+```{r concrete-strength-age-plot, fig.width=9, fig.height=6, out.width="100%", fig.align="center", fig.alt="Boxplots showing concrete compressive strength by age in days, with color showing strength range."}
+ggplot(
+  new_concrete %>% filter(!is.na(strength_range)),
+  aes(
+    x = factor(Age),
+    y = Concrete_compressive_strength,
+    fill = strength_range
+  )
+) +
+  geom_boxplot(color = "gray15", outlier.color = "gray15", outlier.size = 1.8) +
+  labs(
+    x = "Age (in days)",
+    y = "Compressive Strength (in MPa)",
+    fill = "Strength Range"
+  ) +
+  theme_minimal()
+```
+
+The age pattern mostly matches what I expected: concrete tends to get stronger as it cures. At the same time, the spread within some ages is still pretty large, especially around 28 days. So age definitely matters, but it is not acting by itself. The mixture design still has a big effect.
+
+### 3. Distribution of Cement Amount and Concrete Strength variables
+
+```{r cement-strength-scatter, fig.width=8.5, fig.height=7, out.width="100%", fig.align="center", fig.alt="Scatterplot showing concrete strength versus cement amount, with point size representing age and color representing water content."}
+ggplot(concrete, aes(
+  x = Cement,
+  y = Concrete_compressive_strength
+)) +
+  geom_point(
+    aes(size = Age, color = Water),
+    alpha = 0.65
+  ) +
+  scale_color_viridis_c(name = "Water") +
+  scale_size_continuous(
+    name = "Age",
+    breaks = c(100, 200, 300),
+    range = c(1.2, 7)
+  ) +
+  labs(
+    title = "Exploring Strength versus (Cement, Age, and Water)",
+    x = "Cement",
+    y = "Strength",
+    caption = "Age is measured in days"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(size = 18),
+    legend.position = "right"
+  )
+```
+This scatterplot shows a general pattern where more cement is often connected with higher strength, but it is definitely not a perfect line. Some samples have similar cement amounts but very different strengths. The point size helps bring age into the picture, and the color scale adds water content as another mixture variable. Overall, this chart makes it pretty clear that concrete strength is not just a cement problem. It depends on the full mix and curing time.
+
+## Interactive Chart Requirement
+
+For the interactive requirement, I used the concrete scatterplot again because it already has a lot going on. The static chart is good for the overall pattern, but the interactive version lets the reader hover over a point and see the exact cement, strength, age, and water values. That is useful because otherwise the chart is just a big cloud of points.
+
+```{r interactive-concrete-scatter, fig.width=8.5, fig.height=6.5, out.width="100%"}
+plot_ly(
+  data = concrete,
+  x = ~Cement,
+  y = ~Concrete_compressive_strength,
+  type = "scatter",
+  mode = "markers",
+  color = ~Water,
+  size = ~Age,
+  colors = viridisLite::viridis(100),  marker = list(opacity = 0.65),
+  text = ~paste0(
+    "Cement: ", Cement, " kg/m³",
+    "<br>Strength: ", Concrete_compressive_strength, " MPa",
+    "<br>Age: ", Age, " days",
+    "<br>Water: ", Water, " kg/m³"
+  ),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = "Interactive Concrete Strength Plot",
+    xaxis = list(title = "Cement"),
+    yaxis = list(title = "Concrete compressive strength")
+  ) %>%
+  config(displayModeBar = FALSE)
+```
+
+The interactive part helps because the reader can hover over the points and see the actual values behind each mixture. A regular scatterplot is good for the big pattern, but hovering makes it easier to check individual concrete samples without crowding the chart with labels.
+
+### Redesign distribution of continuous variables Cement and Concrete Strength
+
+```{r concrete-distributions-density, fig.width=8.5, fig.height=4.8, out.width="100%", fig.align="center", fig.alt="Overlayed density plot comparing the standardized distributions of cement amount and concrete compressive strength."}
+concrete_scaled <- concrete_long %>%
+  group_by(variable) %>%
+  mutate(
+    scaled_value = as.numeric(scale(value))
+  ) %>%
+  ungroup()
+
+ggplot(concrete_scaled, aes(x = scaled_value, fill = variable, color = variable)) +
+  geom_density(alpha = 0.35, linewidth = 1) +
+  labs(
+    title = "Standardized Distributions of Cement and Concrete Strength",
+    subtitle = "Values are standardized because the variables use different units",
+    x = "Standardized value",
+    y = "Density",
+    fill = "Variable",
+    color = "Variable"
+  ) +
+  theme_minimal()
+```
+For the redesign, I used the earlier distribution chart as the version that could be better. The original faceted histograms were not wrong, but having two separate panels made the comparison feel a little disconnected. This version standardizes the values first, since cement and strength use different units, and then puts both distributions on the same scale. That makes it easier to compare the overall shape and spread without pretending kg per cubic meter and MPa are the same thing.
+
+## Conclusion
+
+Overall, the Tampa weather charts showed a clear seasonal pattern. The histogram, density plots, and ridge plot all told the same basic story, but each one made the pattern visible in a different way. The precipitation chart added another angle by showing that rainfall is not just about how much rain falls, but also how many days actually had rain.
+
+The concrete section showed that strength depends on both age and mixture design. Older concrete generally had higher strength, but there was still a lot of variation within the same age groups. Cement had a positive relationship with strength, but it was clearly not the only thing involved. This was a good example of why one chart or one variable usually is not enough when the dataset has multiple factors working together.
+
